@@ -3,15 +3,25 @@
 import os, sys, time, re
 
 
+
+
+
+# splitting input into a directory of processes by pipe --  args by space then
+# moving commands into a separate list.
 args = []  # making a list of args
+process = input('myShell-' + os.getcwd() + ': ').split(' | ')
+for p in process:
+    args = p.split(' ')
+cmd = [args[0]]  # creates a list of one argument leaves opportunity for addtl commands later
 
 
-# splitting input into a directory of arguments
-args = input('myShell-' + os.getcwd() + ': ').split(' ')
-cmd = [args[0]] # creates a list of one argument leaves opportunity for addtl commands later
 
 
-# METHOD FOR INSTRUCTION EXECUTION
+
+# TODO create a check for creating additional file directories if pipe exists
+
+
+# INSTRUCTION EXECUTION
 def execute(cmds):
     for dir in re.split(":", os.environ['PATH']):  # try each directory in path
         program = "%s/%s" % (dir, cmds[0])
@@ -30,7 +40,7 @@ def redirect_fd1(fileName):  # write to a file not to screen
     fd = sys.stdout.fileno()  # os.open("p4-output.txt", os.O_CREAT)
     os.set_inheritable(fd, True)
     os.write(2, ("file directory  fd=%d redirected for  writing\n" % fd).encode())
-     # sys.exit(0)
+    sys.exit(0)
 
 
 def redirect_fd0(filename):  # read from file not keyboard
@@ -39,7 +49,17 @@ def redirect_fd0(filename):  # read from file not keyboard
     fd = sys.stdin.fileno()
     os.set_inheritable(fd, True)
     os.write(2, ("file directory fd = %d redirected for reading\n" % fd).encode())
-    # sys.exit(0)
+    sys.exit(0)
+
+# searching for redirects
+loc = 0
+for arg in args:
+    if arg == '<':
+        redirect_fd0(args[loc-1])
+    if arg == '>':
+        redirect_fd1(loc+1)
+    loc += 1
+
 
 
 # REGULAR EXPRESSION SYNTAX VARIATIONS
@@ -58,7 +78,7 @@ elif len(args) is 2: #working
     elif rc == 0:  # child
         redirect_fd0(args[1])
         execute(cmd)
-        sys.exit(0)
+        # sys.exit(0)
 
     else:
         os.write(1, ("forked = %d \n" % rc).encode())
@@ -121,4 +141,9 @@ elif len(args) is 4:
 else:
     os.write(2, ("Error: number of arguments is not accepted \n").encode())
 
+
+# TODO - exit method to return to shell
+# TODO - need to include pipes
+# TODO - need to support multiple pipes
+# TODO -
 
