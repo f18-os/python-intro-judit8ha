@@ -20,8 +20,8 @@ def execute(cmds):
     sys.exit(1)  # terminate with error
 
 
-def redirect_fd1(fileName):  # write to a file not to screen >
-    os.close(1)  # redirect child's stdout
+def redirect_write(fileName,fd):  # write to a file not to screen >
+    os.close(fd)  # redirect child's stdout
     sys.stdout = open(fileName, "w")
     fd = sys.stdout.fileno()  # os.open("p4-output.txt", os.O_CREAT)
     os.set_inheritable(fd, True)
@@ -29,8 +29,8 @@ def redirect_fd1(fileName):  # write to a file not to screen >
     #sys.exit(0)
 
 
-def redirect_fd0(filename):  # read from file not keyboard <
-    os.close(0)  # redirect child's stdin
+def redirect_read(filename, fd):  # read from file not keyboard <
+    os.close(fd)  # redirect child's stdin
     sys.stdin = open(filename, "r")
     fd = sys.stdin.fileno()
     os.set_inheritable(fd, True)
@@ -38,16 +38,44 @@ def redirect_fd0(filename):  # read from file not keyboard <
     #sys.exit(0)
 
 
+def findRedirects(args):
+    for a in args:
+        if a is '>' or '<':
+            return True
+
+
 # searching for redirects
+def managePipeRedirects(args, r, w):
+    loc = 0
+    global hasR
+    for arg in args:
+        if arg is '<':
+            redirect_read(args[loc + 1],w )
+            hasR = True
+        else:
+            os.close(w)
+            os.fdopen(r)
+            os.set_inheritable(w, True)
+        if arg is '>':
+            redirect_write(args[loc + 1],r)
+            hasR = True
+        else:
+            os.close(r)
+            os.fdopen(w)
+            os.set_inheritable(r, True)
+            hasR = False
+        loc += 1
+
+
 def manageRedirects(args):
     loc = 0
     global hasR
     for arg in args:
         if arg is '<':
-            redirect_fd0(args[loc + 1])
+            redirect_read(args[loc + 1],0)
             hasR = True
         if arg is '>':
-            redirect_fd1(args[loc + 1])
+            redirect_write(args[loc + 1],1)
             hasR = True
         else:
             hasR = False
@@ -57,111 +85,60 @@ def manageRedirects(args):
 # splitting input into a directory of processes by pipe --  args by space then
 # moving commands into a separate list.
 process = input('myShell-' + os.getcwd() + ': ').split(' | ')
-args = process[0].split(' ')
+curr = 0
+last = len(process)-1
+args = process[curr].split(' ')
 cmd = [args[0]]  # creates a list of one argument leaves opportunity for addtl commands later
 pipe = (len(process) > 1)
-# manageRedirects(args)
 
-if len(args) > 1:
-    pid = os.getpid()
+if pipe:
+    print('== PIPES EXIST == ')
+    processpid = os.fork()
+    r, w = os.pipe()
     rc = os.fork()
-    if rc < 0:
-        os.write(2, ("fork failed, returning %d\n" % rc).encode())
-        sys.exit(1)
-    elif rc == 0:  # child
-        manageRedirects(args)
-        execute(cmd)
-        #sys.exit(0)
-    else:
-        os.write(1, ("forked = %d \n" % rc).encode())
-        cPid: os.wait()
-        sys.exit(0)
-        # os.execve('myShellDir/myShell.py', 'myShell.py', os.environ)  # try to restart
+
+    if processpid:   #pipe parent
+        print('== PARENT PIPE PROCESS ==')
+        curr += 1  #change process
+        args=process[curr].split(' ')
+        processpid: os.wait()
+        os.close(0)
+        os.dup(r)
+        os.close(1)
+        os.dup(w)
+        print('==NEW PROCESS  = %d' % curr)
+    else:           #pipe child
+        print('== CHILD PIPE == ')
+        pid = os.getpid()
+        rc = os.fork()
+        if rc < 0:
+            os.write(2, ("fork failed, returning %d\n" % rc).encode())
+            sys.exit(1)
+        elif rc == 0:  # child
+            managePipeRedirects(args, r, w)
+            execute(cmd)
+            # sys.exit(0)
+        else:
+            os.write(1, ("forked = %d \n" % rc).encode())
+            pid: os.wait()
 else:
-    execute(args)
-    #os.execve('myShellDir/myShell.py', 'myShell.py', os.environ)
+    print('==NO PIPES == ')
+    if findRedirects(args):
+        pid = os.getpid()
+        rc = os.fork()
+        if rc < 0:
+            os.write(2, ("fork failed, returning %d\n" % rc).encode())
+            sys.exit(1)
+        elif rc == 0:  # child
+            manageRedirects(args)
+            execute(cmd)
+            # sys.exit(0)
+        else:
+            os.write(1, ("forked = %d \n" % rc).encode())
+            cPid: os.wait()
+    else:
+        execute(args)
 
-
-
-#
-# # REGULAR EXPRESSION SYNTAX VARIATIONS
-# # 1 ARGUMENT
-# if len(args) is 1:    #working
-#     execute(args)
-# # 2 ARGUMENTS
-# elif len(args) is 2: #working
-#     pid = os.getpid()
-#     rc = os.fork()
-#
-#     if rc < 0:
-#         os.write(2, ("fork failed, returning %d\n" % rc).encode())
-#         sys.exit(1)
-#
-#     elif rc == 0:  # child
-#         redirect_fd0(args[1])
-#         execute(cmd)
-#         # sys.exit(0)
-#
-#     else:
-#         os.write(1, ("forked = %d \n" % rc).encode())
-#         cPid: os.wait()
-# # 3 ARGUMENTS
-# elif len(args) is 3:
-#     pid = os.getpid()
-#     rc = os.fork()
-#
-#     if rc < 0:
-#         os.write(2, ("fork failed, returning %d\n" % rc).encode())
-#         sys.exit(1)
-#
-#     elif rc == 0:
-#         # rc = os.fork()
-#         val: str
-#         for val in args: print("%s \n" % val)   ## DEBUGGING CODE
-#         if args[1] is '>':
-#             redirect_fd1(args[2])
-#             execute(cmd)
-#             sys.exit(0)
-#
-#         elif args[1] is '<':
-#             redirect_fd0(args[2])
-#             execute(args[0])
-#             sys.exit(0)
-#
-#         else:
-#             os.write(1, ("command not recognized, exiting \n" % rc).encode())
-#             sys.exit(1)
-#     else:
-#         os.write(1, ("forked = %d \n" % rc).encode())
-#         cPid: os.wait()
-# # 4 ARGUMENTS
-# elif len(args) is 4:
-#     pid = os.getpid()
-#     rc = os.fork()
-#     if rc < 0:
-#         os.write(2, ("fork failed, returning %d\n" % rc).encode())
-#         sys.exit(1)
-#
-#     elif rc == 0:
-#         if args[2] is '>':
-#             redirect_fd1(args[3])
-#             redirect_fd0(args[1])
-#             execute(cmd)
-#             sys.exit(0)
-#
-#         elif args[2] is '<':
-#             redirect_fd0(args[1])
-#             redirect_fd1(args[3])
-#             execute(cmd)
-#             sys.exit(0)
-#
-#         else:
-#             os.write(1, ("command not recognized, exiting \n" % rc).encode())
-#             sys.exit(1)
-#     else:
-#         cPid: os.wait()
-# else:
-#     os.write(2, ("Error: number of arguments is not accepted \n").encode())
 
 
 # TODO - exit method to return to shell
