@@ -95,32 +95,26 @@ if pipe:
     print('== PIPES EXIST == ')
     processpid = os.fork()
     r, w = os.pipe()
-    rc = os.fork()
-
     if processpid:   #pipe parent
         print('== PARENT PIPE PROCESS ==')
         curr += 1  #change process
-        args=process[curr].split(' ')
+        args = process[curr].split(' ')
         processpid: os.wait()
         os.close(0)
         os.dup(r)
+        #os.close(r)
+        # os.close(w)
+        execute(args)
+
+        print('==NEW PROCESS  = %d' % curr)
+    #IF PIPE'S PID == 0   -CHILD -
+    else:
+        print('== CHILD PIPE == ')
+        manageRedirects(args)
         os.close(1)
         os.dup(w)
-        print('==NEW PROCESS  = %d' % curr)
-    else:           #pipe child
-        print('== CHILD PIPE == ')
-        pid = os.getpid()
-        rc = os.fork()
-        if rc < 0:
-            os.write(2, ("fork failed, returning %d\n" % rc).encode())
-            sys.exit(1)
-        elif rc == 0:  # child
-            managePipeRedirects(args, r, w)
-            execute(cmd)
-            # sys.exit(0)
-        else:
-            os.write(1, ("forked = %d \n" % rc).encode())
-            pid: os.wait()
+        execute(args)
+        # sys.exit(0)
 else:
     print('==NO PIPES == ')
     if findRedirects(args):
