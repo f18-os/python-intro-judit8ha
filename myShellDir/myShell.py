@@ -89,33 +89,61 @@ curr = 0
 last = len(process)-1
 args = process[curr].split(' ')
 cmd = [args[0]]  # creates a list of one argument leaves opportunity for addtl commands later
-pipe = (len(process) > 1)
+pipe = (len(process) > 1) #bool check for pipes
 
 if pipe:
     print('== PIPES EXIST == ')
     processpid = os.fork()
     r, w = os.pipe()
-    if processpid:   #pipe parent
+    # if processpid:   #pipe parent
+    #     print('== PARENT PIPE PROCESS ==')
+    #     curr += 1  #change process
+    #     args = process[curr].split(' ')
+    #     print(' == Parent waiting... ')
+    #     processpid: os.wait()
+    #     os.close(r)
+    #     os.fdopen(w)
+    #     #os.dup()
+    #     fd = sys.stdin.fileno()
+    #     os.set_inheritable(fd, True)
+    #     #os.close(w)
+    #     execute(args)
+    #
+    #     print('==NEW PROCESS  = %d' % curr)
+    # #IF PIPE'S PID == 0   -CHILD -
+    if processpid == 0:
+        print('== CHILD PIPE == ')
+        manageRedirects(args)
+        os.close(r)
+        os.dup2(w, 1)
+        os.close(w)
+        #os.close(w)
+        #os.fdopen(r, 'w')
+        #os.dup(r)
+        #fd = sys.stdout.fileno()
+        #os.set_inheritable(w, True)
+        #os.close(r)
+        execute(args)
+        print('child done')
+        # sys.exit(0)
+    else:
         print('== PARENT PIPE PROCESS ==')
         curr += 1  #change process
         args = process[curr].split(' ')
         processpid: os.wait()
-        os.close(0)
-        os.dup(r)
-        #os.close(r)
-        # os.close(w)
+        #print(' == Parent waiting... ')
+        os.close(w)
+        os.dup2(r,0)
+        os.close(r)
+        #os.set_inheritable(w, True)
         execute(args)
 
-        print('==NEW PROCESS  = %d' % curr)
-    #IF PIPE'S PID == 0   -CHILD -
-    else:
-        print('== CHILD PIPE == ')
-        manageRedirects(args)
-        os.close(1)
-        os.dup(w)
-        execute(args)
-        # sys.exit(0)
-else:
+        #pid: os.wait()
+
+
+
+
+else:                   #execute fork no pipes
     print('==NO PIPES == ')
     if findRedirects(args):
         pid = os.getpid()
