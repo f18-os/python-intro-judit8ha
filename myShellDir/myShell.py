@@ -2,8 +2,6 @@
 
 import os, sys, time, re
 
-hasR = True
-
 # TODO create a check for creating additional file directories if pipe exists
 
 
@@ -20,22 +18,38 @@ def execute(cmds):
     sys.exit(1)  # terminate with error
 
 
-def redirect_write(fileName,fd):  # write to a file not to screen >
+# == REDIRECTS FOR PIPE AND/OR FILES  == #
+
+def redirect_write(filename, fd):  #FD1 write to a file not to screen >
     os.close(fd)  # redirect child's stdout
-    sys.stdout = open(fileName, "w")
+    sys.stdout = open(filename, "w")
     fd = sys.stdout.fileno()  # os.open("p4-output.txt", os.O_CREAT)
     os.set_inheritable(fd, True)
-    os.write(2, ("file directory  fd=%d redirected for  writing\n" % fd).encode())
-    #sys.exit(0)
+    os.write(2, ("file descriptor  fd=%d redirected for  writing\n" % fd).encode())
 
 
-def redirect_read(filename, fd):  # read from file not keyboard <
+def redirect_read(filename, fd):  #FD0 read from file not keyboard <
     os.close(fd)  # redirect child's stdin
     sys.stdin = open(filename, "r")
     fd = sys.stdin.fileno()
     os.set_inheritable(fd, True)
     os.write(2, ("file directory fd = %d redirected for reading\n" % fd).encode())
-    #sys.exit(0)
+
+
+def redirectP_write():  # redirects to pipe's fd
+    os.close(1)  # redirect child's stdout
+    sys.stdout = os.fdopen(4, "w")
+    fd = sys.stdout.fileno()
+    os.set_inheritable(fd, True)
+    os.write(2, ("file descriptor  fd=%d redirected for  writing to pipe\n" % fd).encode())
+
+
+def redirectP_read():  # redirects to pipe's fd
+    os.close(0)  # redirect child's stdin
+    sys.stdin = os.fdopen(3, "r")
+    fd = sys.stdin.fileno()
+    os.set_inheritable(fd, True)
+    os.write(2, ("file directory fd = %d redirected for reading\n" % fd).encode())
 
 
 def findRedirects(args):
@@ -51,19 +65,16 @@ def managePipeRedirects(args, r, w):
     for arg in args:
         if arg is '<':
             redirect_read(args[loc + 1],w )
-            hasR = True
         else:
             os.close(w)
             os.fdopen(r)
             os.set_inheritable(w, True)
         if arg is '>':
             redirect_write(args[loc + 1],r)
-            hasR = True
         else:
             os.close(r)
             os.fdopen(w)
             os.set_inheritable(r, True)
-            hasR = False
         loc += 1
 
 
@@ -72,13 +83,9 @@ def manageRedirects(args):
     global hasR
     for arg in args:
         if arg is '<':
-            redirect_read(args[loc + 1],0)
-            hasR = True
+            redirect_read(args[loc + 1], 0)
         if arg is '>':
-            redirect_write(args[loc + 1],1)
-            hasR = True
-        else:
-            hasR = False
+            redirect_write(args[loc + 1], 1)
         loc += 1
 
 
@@ -92,59 +99,29 @@ cmd = [args[0]]  # creates a list of one argument leaves opportunity for addtl c
 pipe = (len(process) > 1) #bool check for pipes
 
 if pipe:
-    print('== PIPES EXIST == ')
+    os.write(2, ('== PIPES EXIST == ').encode())
     processpid = os.fork()
     r, w = os.pipe()
-    # if processpid:   #pipe parent
-    #     print('== PARENT PIPE PROCESS ==')
-    #     curr += 1  #change process
-    #     args = process[curr].split(' ')
-    #     print(' == Parent waiting... ')
-    #     processpid: os.wait()
-    #     os.close(r)
-    #     os.fdopen(w)
-    #     #os.dup()
-    #     fd = sys.stdin.fileno()
-    #     os.set_inheritable(fd, True)
-    #     #os.close(w)
-    #     execute(args)
-    #
-    #     print('==NEW PROCESS  = %d' % curr)
-    # #IF PIPE'S PID == 0   -CHILD -
     if processpid == 0:
-        print('== CHILD PIPE == ')
+        os.write(2, ('== CHILD PIPE == working on process %d' % curr).encode())
         manageRedirects(args)
-        os.close(r)
-        os.dup2(w, 1)
-        os.close(w)
-        #os.close(w)
-        #os.fdopen(r, 'w')
-        #os.dup(r)
-        #fd = sys.stdout.fileno()
-        #os.set_inheritable(w, True)
-        #os.close(r)
+        redirectP_write(w, 1)
         execute(args)
-        print('child done')
+        os.write(2, ("child done").encode())
         # sys.exit(0)
     else:
-        print('== PARENT PIPE PROCESS ==')
+        os.write(2, ('== PARENT PIPE PROCESS ==').encode())
         curr += 1  #change process
         args = process[curr].split(' ')
+        os.write(2, (' == Parent waiting... ').encode())
         processpid: os.wait()
-        #print(' == Parent waiting... ')
-        os.close(w)
-        os.dup2(r,0)
-        os.close(r)
-        #os.set_inheritable(w, True)
+        os.close(0)
+        os.dup2(r, 0)
+        os.write(2, ('== PARENT PIPE PROCESS working on process %d ==' % curr).encode())
         execute(args)
 
-        #pid: os.wait()
-
-
-
-
 else:                   #execute fork no pipes
-    print('==NO PIPES == ')
+    os.write(2, ('==NO PIPES == ').encode())
     if findRedirects(args):
         pid = os.getpid()
         rc = os.fork()
