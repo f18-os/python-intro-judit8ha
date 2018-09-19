@@ -11,24 +11,24 @@ def is_direct_path(p):
 
 # INSTRUCTION EXECUTION
 def execute(cmds):
-    # global program
-    # if len(cmds) > 1:   #this is for cd "/some/path"
-    #     if is_direct_path(cmds[1]):
-    #         os.chdir(cmds[1])
-    # if is_direct_path(cmds[0]):
-    #     program = cmds[0]
-    #     try:
-    #         os.execve(program, cmds, os.environ)  # try to exec program
-    #     except FileNotFoundError:  # ...expected
-    #         os.write(2, ("Error: Could not exec on 2nd if %s\n" % cmds[0]).encode())
-    #         sys.exit(1)  # terminate with error
-    # else:
-    for dir in re.split(":", os.environ['PATH']):  # try each directory in path
-        program = "%s/%s" % (dir, cmds[0])
+    global program
+    if len(cmds) > 1:   #this is for cd "/some/path"
+        if is_direct_path(cmds[1]):
+            os.chdir(cmds[1])
+    if is_direct_path(cmds[0]):
+        program = cmds[0]
         try:
             os.execve(program, cmds, os.environ)  # try to exec program
         except FileNotFoundError:  # ...expected
-            pass  # ...fail quietly
+            os.write(2, ("Error: Could not exec on 2nd if %s\n" % cmds[0]).encode())
+            sys.exit(1)  # terminate with error
+    else:
+        for dir in re.split(":", os.environ['PATH']):  # try each directory in path
+            program = "%s/%s" % (dir, cmds[0])
+            try:
+                os.execve(program, cmds, os.environ)  # try to exec program
+            except FileNotFoundError:  # ...expected
+                pass  # ...fail quietly
 
     os.write(2, ("Error: Could not exec %s\n" % cmds[0]).encode())
     sys.exit(1)  # terminate with error
@@ -36,19 +36,19 @@ def execute(cmds):
 
 # == REDIRECTS FOR PIPE AND/OR FILES  == #
 
-def redirect_write(filename, fd):  #FD1 write to a file not to screen >
-    os.close(fd)  # redirect child's stdout
+def redirect_write(filename, fdd):  #FD1 write to a file not to screen >
+    os.close(fdd)  # redirect child's stdout
     sys.stdout = open(filename, "w")
-    fd = sys.stdout.fileno()  # os.open("p4-output.txt", os.O_CREAT)
-    os.set_inheritable(fd, True)
+    f = sys.stdout.fileno()  # os.open("p4-output.txt", os.O_CREAT)
+    os.set_inheritable(f, True)
     os.write(2, ("file descriptor  fd=%d redirected for  writing\n" % fd).encode())
 
 
 def redirect_read(filename, fd):  #FD0 read from file not keyboard <
     os.close(fd)  # redirect child's stdin
     sys.stdin = open(filename, "r")
-    fd = sys.stdin.fileno()
-    os.set_inheritable(fd, True)
+    f = sys.stdin.fileno()
+    os.set_inheritable(f, True)
     os.write(2, ("file directory fd = %d redirected for reading\n" % fd).encode())
 
 
@@ -58,10 +58,12 @@ def findRedirects(args):
             return True
 
 
-def execRedirectrs():
-    if findRedirects(args):
-        manageRedirects(args)
-        execute(cmd)
+def execRedirectrs(cmd, args):
+    #if findRedirects(args):
+    for a in args:
+        if a is '>' or '<':
+            manageRedirects(args)
+            execute(cmd)
     else:
         execute(args)
 
@@ -76,18 +78,27 @@ def manageRedirects(args):
         loc += 1
 
 
+def checkEOF():
+    if os.read(sys.stdout) is 0:
+        return
+
+
+sys.path.append('myShell.py')
+
+
 # splitting input into a directory of processes by pipe --  args by space then
 # moving commands into a separate list.
 try:
-    sys.ps1
+    os.environ.get('PS1')
 except AttributeError:
-    sys.ps1 = '$'
+    os.environ['PS1'] = '$ '
 
 user_in = ''
 while user_in is not 'exit':
-    # user_in = input('myShell-' + os.getcwd() + ': ')
-    user_in = input(sys.ps1)
-    process = user_in.split(' | ')
+    user_in = input('')
+    prompt = os.environ.get('PS1')
+    user_in = ' | ' os.read
+    process = user_in.split('|')
     curr = 0
     last = len(process)-1
     args = process[curr].split(' ')
@@ -132,27 +143,8 @@ while user_in is not 'exit':
             execute(args)
     else:                   #execute fork no pipes
         os.write(2, ('==NO PIPES == \n').encode())
-        if findRedirects(args):
-            pid = os.getpid()
-            rc = os.fork()
-            if rc < 0:
-                os.write(2, ("fork failed, returning %d\n" % rc).encode())
-                sys.exit(1)
-            elif rc == 0:  # child
-                manageRedirects(args)
-                execute(cmd)
-            else:
-                os.write(1, ("forked = %d \n" % rc).encode())
-                cPid: os.wait()
-        else:
-            execute(args)
+        execRedirectrs(cmd, args)
 
     user_in = ''
 
 os.write(2, 'Terminated with EXIT CODE 0'.encode())
-
-
-# TODO - exit method to return to shell
-# TODO - need to include pipes
-# TODO - need to support multiple pipes
-# TODO -
