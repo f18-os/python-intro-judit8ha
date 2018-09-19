@@ -3,10 +3,26 @@
 import os, sys, time, re
 
 # TODO create a check for creating additional file directories if pipe exists
+program = ''
+
+def is_direct_path(p):
+    return p[0] is '/'
 
 
 # INSTRUCTION EXECUTION
 def execute(cmds):
+    # global program
+    # if len(cmds) > 1:   #this is for cd "/some/path"
+    #     if is_direct_path(cmds[1]):
+    #         os.chdir(cmds[1])
+    # if is_direct_path(cmds[0]):
+    #     program = cmds[0]
+    #     try:
+    #         os.execve(program, cmds, os.environ)  # try to exec program
+    #     except FileNotFoundError:  # ...expected
+    #         os.write(2, ("Error: Could not exec on 2nd if %s\n" % cmds[0]).encode())
+    #         sys.exit(1)  # terminate with error
+    # else:
     for dir in re.split(":", os.environ['PATH']):  # try each directory in path
         program = "%s/%s" % (dir, cmds[0])
         try:
@@ -42,25 +58,6 @@ def findRedirects(args):
             return True
 
 
-# searching for redirects
-def managePipeRedirects(args, r, w):
-    loc = 0
-    global hasR
-    for arg in args:
-        if '<' in args:
-            redirect_read(args[loc + 1],w )
-        else:
-            os.close(w)
-            os.fdopen(r)
-            os.set_inheritable(w, True)
-        if arg is '>':
-            redirect_write(args[loc + 1],r)
-        else:
-            os.close(r)
-            os.fdopen(w)
-            os.set_inheritable(r, True)
-        loc += 1
-
 def execRedirectrs():
     if findRedirects(args):
         manageRedirects(args)
@@ -81,9 +78,15 @@ def manageRedirects(args):
 
 # splitting input into a directory of processes by pipe --  args by space then
 # moving commands into a separate list.
+try:
+    sys.ps1
+except AttributeError:
+    sys.ps1 = '$'
+
 user_in = ''
 while user_in is not 'exit':
-    user_in = input('myShell-' + os.getcwd() + ': ')
+    # user_in = input('myShell-' + os.getcwd() + ': ')
+    user_in = input(sys.ps1)
     process = user_in.split(' | ')
     curr = 0
     last = len(process)-1
@@ -118,7 +121,6 @@ while user_in is not 'exit':
             curr += 1  #change process
             args = process[curr].split(' ')
             os.write(2, (' == Parent waiting... \n\n').encode())
-            #os.dup2(1, sys.stdout.fileno)
             processpid: os.wait()
             os.close(0)
             os.dup(r)
@@ -148,8 +150,6 @@ while user_in is not 'exit':
     user_in = ''
 
 os.write(2, 'Terminated with EXIT CODE 0'.encode())
-
-
 
 
 # TODO - exit method to return to shell

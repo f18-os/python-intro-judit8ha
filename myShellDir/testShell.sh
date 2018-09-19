@@ -25,10 +25,10 @@ chkcmd () {
     echo -e "$result: $2\n  $1" | tee -a testLog.txt
 }
 
-chkcmd "/bin/uname" "no parameter, full pathname"
+chkcmd "/bin/uname" "no parameter, full pathname" #done
 chkcmd "/bin/uname \n /bin/uname" "two commands, full pathname"
 chkcmd "/bin/uname \n\n /bin/uname" "two commands, blank line in-between, full pathname"
-chkcmd "uname" "no parameter, no pathname"
+chkcmd "uname" "no parameter, no pathname" # done
 chkcmd '/bin/cat /etc/passwd' "one parameter, full pathname"
 chkcmd 'cat /etc/passwd' "one parameter, no pathname"
 chkcmd 'cat /etc/passwd | sort ' "pipe"
