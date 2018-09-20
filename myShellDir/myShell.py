@@ -29,7 +29,7 @@ def execute(cmds):
         changeDirec(cmds)
         return
 
-    if len(cmds) > 1:   #this is for cd "/some/path"
+    if len(cmds) > 1:
         if is_direct_path(cmds[1]):
             os.chdir(os.environ.get("HOME"))
     if is_direct_path(cmds[0]):
@@ -91,6 +91,39 @@ def manageRedirects(args):
         loc += 1
 
 
+def execPipeProcess(process):
+    curr = 0
+    args = process[curr].split(' ')
+    r, w = os.pipe()
+    os.set_inheritable(r, True)
+    os.set_inheritable(w, True)
+    processpid = os.fork()
+
+    if processpid < 0:
+        sys.exit(1)
+
+    if processpid == 0:
+        os.close(1)
+        os.dup(w)
+        os.close(w)
+        os.close(r)
+        fd = sys.stdout.fileno()
+        os.set_inheritable(fd, True)
+        execute(args)
+    else:
+        #processpid
+        curr += 1  # change process
+        args = process[curr].split(' ')
+        os.waitpid(processpid,0)
+        os.close(0)
+        os.dup(r)
+        os.close(r)
+        os.close(w)
+        fd = sys.stdin.fileno()
+        os.set_inheritable(fd, True)
+        execute(args)
+
+
 # splitting input into a directory of processes by pipe --  args by space then
 # moving commands into a separate list.
 try:
@@ -99,53 +132,29 @@ except AttributeError:
     sys.ps1 = '$ '
 
 if sys.ps1 is None:
-    sys.ps1 = '$ '
+    sys.ps1 = '$'
 
 user_in = ''
 while user_in != "exit":
+    user_in = input(sys.ps1)
+    process = user_in.split(' | ')
+    curr = 0
+    #last = len(process) - 1
+    args = process[curr].split(' ')
+    cmd = [args[0]]  # creates a list of one argument leaves opportunity for addtl commands later
+    pipe = (len(process) > 1)  # bool check for pipes
     pid = os.fork()
     if pid == 0:
-        user_in = input(sys.ps1)
-        process = user_in.split(' | ')
-        curr = 0
-        last = len(process)-1
-        args = process[curr].split(' ')
-        cmd = [args[0]]  # creates a list of one argument leaves opportunity for addtl commands later
-        pipe = (len(process) > 1) #bool check for pipes
-
         if pipe:
-            r, w = os.pipe()
-            os.set_inheritable(r, True)
-            os.set_inheritable(w, True)
-            processpid = os.fork()
-
-            if processpid < 0:
-                sys.exit(1)
-
-            if processpid == 0:
-                os.close(1)
-                os.dup(w)
-                os.close(w)
-                os.close(r)
-                fd = sys.stdout.fileno()
-                os.set_inheritable(fd, True)
-                execute(args)
-
-            else:
-                curr += 1  #change process
-                args = process[curr].split(' ')
-                processpid: os.wait()
-                os.close(0)
-                os.dup(r)
-                os.close(r)
-                os.close(w)
-                fd = sys.stdin.fileno()
-                os.set_inheritable(fd, True)
-                execute(args)
-
+            execPipeProcess(process)
         else:                   #execute fork no pipes
             execRedirectrs(cmd, args)
     else:
-        pid: os.wait()
+        if ' & ' in user_in:
+            if pipe:
+                execPipeProcess(process)
+            else:
+                execRedirectrs(cmd, args)
+#        pid: os.wait()
         break
     user_in = ''
