@@ -1,20 +1,37 @@
 #! /usr/bin/env python3
 
-import os, sys, time, re
+import os, sys, re
 
-# TODO create a check for creating additional file directories if pipe exists
 program = ''
 
+
 def is_direct_path(p):
-    return p[0] is '/'
+    return p[0] == '/'
+
+
+def changeDirec(cmds):
+    if len(cmds) > 1:
+        wd = cmds[1]
+        if cmds[1] == '..':
+            cd = os.getcwd().split('/')
+            wd = '/'.join(cd[0:len(cd)-2])
+        try:
+            os.chdir(wd)
+        except NotADirectoryError:
+            sys.stderr("Not a Directory")
+    return
 
 
 # INSTRUCTION EXECUTION
 def execute(cmds):
     global program
+    if cmds[0] == 'cd':  # if command is cd call cd method & return
+        changeDirec(cmds)
+        return
+
     if len(cmds) > 1:   #this is for cd "/some/path"
         if is_direct_path(cmds[1]):
-            os.chdir(cmds[1])
+            os.chdir(os.environ.get("HOME"))
     if is_direct_path(cmds[0]):
         program = cmds[0]
         try:
@@ -35,13 +52,11 @@ def execute(cmds):
 
 
 # == REDIRECTS FOR PIPE AND/OR FILES  == #
-
 def redirect_write(filename, fdd):  #FD1 write to a file not to screen >
     os.close(fdd)  # redirect child's stdout
     sys.stdout = open(filename, "w")
     f = sys.stdout.fileno()  # os.open("p4-output.txt", os.O_CREAT)
     os.set_inheritable(f, True)
-    os.write(2, ("file descriptor  fd=%d redirected for  writing\n" % fd).encode())
 
 
 def redirect_read(filename, fd):  #FD0 read from file not keyboard <
@@ -49,21 +64,19 @@ def redirect_read(filename, fd):  #FD0 read from file not keyboard <
     sys.stdin = open(filename, "r")
     f = sys.stdin.fileno()
     os.set_inheritable(f, True)
-    os.write(2, ("file directory fd = %d redirected for reading\n" % fd).encode())
 
 
 def findRedirects(args):
     for a in args:
-        if a is '>' or '<':
+        if a is '>' or a is '<':
             return True
+    return False
 
 
 def execRedirectrs(cmd, args):
-    #if findRedirects(args):
-    for a in args:
-        if a is '>' or '<':
-            manageRedirects(args)
-            execute(cmd)
+    if findRedirects(args):
+        manageRedirects(args)
+        execute(cmd)
     else:
         execute(args)
 
@@ -78,73 +91,61 @@ def manageRedirects(args):
         loc += 1
 
 
-def checkEOF():
-    if os.read(sys.stdout) is 0:
-        return
-
-
-sys.path.append('myShell.py')
-
-
 # splitting input into a directory of processes by pipe --  args by space then
 # moving commands into a separate list.
 try:
-    os.environ.get('PS1')
+   sys.ps1 = os.environ.get('PS1')
 except AttributeError:
-    os.environ['PS1'] = '$ '
+    sys.ps1 = '$ '
+
+if sys.ps1 is None:
+    sys.ps1 = '$ '
 
 user_in = ''
-while user_in is not 'exit':
-    user_in = input('')
-    prompt = os.environ.get('PS1')
-    user_in = ' | ' os.read
-    process = user_in.split('|')
-    curr = 0
-    last = len(process)-1
-    args = process[curr].split(' ')
-    cmd = [args[0]]  # creates a list of one argument leaves opportunity for addtl commands later
-    pipe = (len(process) > 1) #bool check for pipes
+while user_in != "exit":
+    pid = os.fork()
+    if pid == 0:
+        user_in = input(sys.ps1)
+        process = user_in.split(' | ')
+        curr = 0
+        last = len(process)-1
+        args = process[curr].split(' ')
+        cmd = [args[0]]  # creates a list of one argument leaves opportunity for addtl commands later
+        pipe = (len(process) > 1) #bool check for pipes
 
-    if pipe:
-        os.write(2, ('== PIPES EXIST == \n').encode())
-        r, w = os.pipe()
-        os.set_inheritable(r, True)
-        os.set_inheritable(w, True)
-        processpid = os.fork()
+        if pipe:
+            r, w = os.pipe()
+            os.set_inheritable(r, True)
+            os.set_inheritable(w, True)
+            processpid = os.fork()
 
-        if processpid < 0:
-            os.write(2, ('INCORRECT PROCESS').encode())
-            sys.exit(1)
+            if processpid < 0:
+                sys.exit(1)
 
-        if processpid == 0:
-            os.write(2, ('== CHILD PIPE == working on process %d\n' % curr).encode())
-            os.close(1)
-            os.dup(w)
-            os.close(w)
-            os.close(r)
-            fd = sys.stdout.fileno()
-            os.set_inheritable(fd, True)
-            execute(args)
-            os.write(2, ("child done\n").encode())
+            if processpid == 0:
+                os.close(1)
+                os.dup(w)
+                os.close(w)
+                os.close(r)
+                fd = sys.stdout.fileno()
+                os.set_inheritable(fd, True)
+                execute(args)
 
-        else:
-            os.write(2, ('== PARENT PIPE PROCESS ==\n').encode())
-            curr += 1  #change process
-            args = process[curr].split(' ')
-            os.write(2, (' == Parent waiting... \n\n').encode())
-            processpid: os.wait()
-            os.close(0)
-            os.dup(r)
-            os.close(r)
-            os.close(w)
-            fd = sys.stdin.fileno()
-            os.set_inheritable(fd, True)
-            os.write(2, ('== PARENT PIPE PROCESS working on process %d ==\n' % curr).encode())
-            execute(args)
-    else:                   #execute fork no pipes
-        os.write(2, ('==NO PIPES == \n').encode())
-        execRedirectrs(cmd, args)
+            else:
+                curr += 1  #change process
+                args = process[curr].split(' ')
+                processpid: os.wait()
+                os.close(0)
+                os.dup(r)
+                os.close(r)
+                os.close(w)
+                fd = sys.stdin.fileno()
+                os.set_inheritable(fd, True)
+                execute(args)
 
+        else:                   #execute fork no pipes
+            execRedirectrs(cmd, args)
+    else:
+        pid: os.wait()
+        break
     user_in = ''
-
-os.write(2, 'Terminated with EXIT CODE 0'.encode())
