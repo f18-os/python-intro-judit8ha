@@ -18,6 +18,7 @@ test shell shows as FAILED.
 
 * cat /etc/passwd | sort 
 * uname > /tmp/x
+* cd .. 
 
 
 **-BUGS -** 
