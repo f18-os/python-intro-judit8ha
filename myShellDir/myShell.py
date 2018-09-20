@@ -111,7 +111,6 @@ def execPipeProcess(process):
         os.set_inheritable(fd, True)
         execute(args)
     else:
-        #processpid
         curr += 1  # change process
         args = process[curr].split(' ')
         os.waitpid(processpid,0)
@@ -150,11 +149,6 @@ while user_in != "exit":
         else:                   #execute fork no pipes
             execRedirectrs(cmd, args)
     else:
-        if ' & ' in user_in:
-            if pipe:
-                execPipeProcess(process)
-            else:
-                execRedirectrs(cmd, args)
-#        pid: os.wait()
+        pid: os.wait()
         break
     user_in = ''
